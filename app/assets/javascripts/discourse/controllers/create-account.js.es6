@@ -16,6 +16,7 @@ export default DiscourseController.extend(ModalFunctionality, {
   userFields: null,
 
   hasAuthOptions: Em.computed.notEmpty('authOptions'),
+  idnetLogins: Discourse.computed.setting('enable_idnet_logins'),
   canCreateLocal: Discourse.computed.setting('enable_local_logins'),
   showCreateForm: Em.computed.or('hasAuthOptions', 'canCreateLocal'),
   maxUsernameLength: Discourse.computed.setting('max_username_length'),

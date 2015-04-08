@@ -889,6 +889,11 @@ en:
     google_oauth2_client_id: "Client ID of your Google application."
     google_oauth2_client_secret: "Client secret of your Google application."
 
+    enable_idnet_logins: 'Enable id.net logins'
+    idnet_client_url: 'id.net client url'
+    idnet_client_id: 'id.net client id'
+    idnet_client_secret: 'id.net client secret'
+
     enable_twitter_logins: "Enable Twitter authentication, requires twitter_consumer_key and twitter_consumer_secret"
     twitter_consumer_key: "Consumer key for Twitter authentication, registered at http://dev.twitter.com"
     twitter_consumer_secret: "Consumer secret for Twitter authentication, registered at http://dev.twitter.com"
