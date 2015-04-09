@@ -80,6 +80,7 @@ class Users::OmniauthCallbacksController < ApplicationController
         user = User.find_by_email(@data.session_data[:email])
         unless user
           user = User.create(name: @data.session_data[:name],
+                             username: @data.session_data[:username],
                              email: @data.session_data[:email],
                              active: true)
         end
