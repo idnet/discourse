@@ -198,6 +198,12 @@ login:
     default: false
   google_oauth2_client_id: ''
   google_oauth2_client_secret: ''
+  enable_idnet_logins:
+    client: true
+    default: false
+  idnet_client_url: 'https://www.id.net'
+  idnet_client_id: ''
+  idnet_client_secret: ''
   enable_yahoo_logins:
     client: true
     default: false

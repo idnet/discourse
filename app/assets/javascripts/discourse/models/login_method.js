@@ -36,7 +36,8 @@ Discourse.LoginMethod.reopenClass({
       "cas",
       "twitter",
       "yahoo",
-      "github"
+      "github",
+      "idnet"
     ].forEach(function(name){
       if (Discourse.SiteSettings["enable_" + name + "_logins"]) {
 
@@ -45,6 +46,9 @@ Discourse.LoginMethod.reopenClass({
         if (name === "google" || name === "google_oauth2") {
           params.frameWidth = 850;
           params.frameHeight = 500;
+        } else if (name === "idnet") {
+          params.frameWidth = 1000;
+          params.frameHeight = 650;
         } else if (name === "facebook") {
           params.frameHeight = 450;
         }

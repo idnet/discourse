@@ -11,7 +11,8 @@ class Users::OmniauthCallbacksController < ApplicationController
     Auth::GoogleOAuth2Authenticator.new,
     Auth::OpenIdAuthenticator.new("yahoo", "https://me.yahoo.com", trusted: true),
     Auth::GithubAuthenticator.new,
-    Auth::TwitterAuthenticator.new
+    Auth::TwitterAuthenticator.new,
+    Auth::IdnetAuthenticator.new('idnet', trusted: true, auto_create_account: true)
   ]
 
   skip_before_filter :redirect_to_login_if_required
@@ -19,7 +20,7 @@ class Users::OmniauthCallbacksController < ApplicationController
   layout false
 
   def self.types
-    @types ||= Enum.new(:facebook, :twitter, :google, :yahoo, :github, :persona, :cas)
+    @types ||= Enum.new(:facebook, :twitter, :google, :yahoo, :github, :persona, :cas, :idnet)
   end
 
   # need to be able to call this
@@ -75,7 +76,17 @@ class Users::OmniauthCallbacksController < ApplicationController
     elsif SiteSetting.invite_only?
       @data.requires_invite = true
     else
-      session[:authentication] = @data.session_data
+      if SiteSetting.enable_idnet_logins
+        user = User.find_by_email(@data.session_data[:email])
+        unless user
+          user = User.create(name: @data.session_data[:name],
+                             email: @data.session_data[:email],
+                             active: true)
+        end
+        user_found(user)
+      else
+        session[:authentication] = @data.session_data
+      end
     end
   end
 

@@ -91,8 +91,12 @@ window.Discourse = Ember.Application.createWithMixins(Discourse.Ajax, {
 
   authenticationComplete: function(options) {
     // TODO, how to dispatch this to the controller without the container?
-    var loginController = Discourse.__container__.lookup('controller:login');
-    return loginController.authenticationComplete(options);
+    if (Discourse.SiteSettings.enable_idnet_logins) {
+      window.location.replace('/');
+    } else {
+      var loginController = Discourse.__container__.lookup('controller:login');
+      return loginController.authenticationComplete(options);
+    }
   },
 
   /**
