@@ -11,7 +11,7 @@ class Auth::IdnetAuthenticator < ::Auth::OAuth2Authenticator
 
     result.email = email = data['email']
     result.name = name = data['name']
-    result.username = data['username']
+    result.username = UserNameSuggester.find_available_username_based_on(data['username'])
 
     oauth2_user_info = Oauth2UserInfo.where(uid: oauth2_uid, provider: oauth2_provider).first
 
