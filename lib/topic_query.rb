@@ -27,6 +27,7 @@ class TopicQuery
                      search
                      slow_platform
                      filter
+                     q
                      ).map(&:to_sym)
 
   # Maps `order` to a columns in `topics`
@@ -70,6 +71,50 @@ class TopicQuery
     create_list(:latest, {}, latest_results)
   end
 
+  def list_search
+
+    results = nil
+
+    if @options[:q].present?
+      search = Search.execute(@options[:q],
+                      type_filter: 'topic',
+                      guardian: Guardian.new(@user))
+
+      topic_ids = search.posts.map(&:topic_id)
+
+      if topic_ids.present?
+        sql = topic_ids.each_with_index.map do |id, idx|
+          "SELECT #{idx} pos, #{id} id"
+        end.join(" UNION ALL ")
+
+        results = Topic
+                    .unscoped
+                    .joins("JOIN (#{sql}) X on X.id = topics.id")
+                    .order("X.pos")
+
+        posts_map = Hash[*search.posts.map{|p| [p.topic_id, p]}.flatten]
+      end
+    end
+
+    results ||= Topic.where("1=0")
+
+    if @user
+      results = results.joins("LEFT OUTER JOIN topic_users AS tu ON (topics.id = tu.topic_id AND tu.user_id = #{@user.id.to_i})")
+                     .references('tu')
+    end
+
+    list = create_list(:latest, {unordered: true}, results)
+
+
+    list.topics.each do |topic|
+      if post = posts_map[topic.id]
+        topic.search_data = {excerpt: search.blurb(post), post_number: post.post_number}
+      end
+    end
+
+    list
+  end
+
   def list_read
     create_list(:read, unordered: true) do |topics|
       topics.order('COALESCE(tu.last_visited_at, topics.bumped_at) DESC')
@@ -105,6 +150,7 @@ class TopicQuery
   end
 
   def list_topics_by(user)
+    @options[:filtered_to_user] = user.id
     create_list(:user_topics) do |topics|
       topics.where(user_id: user.id)
     end
@@ -130,10 +176,10 @@ class TopicQuery
   def list_category_topic_ids(category)
     query = default_results(category: category.id)
     pinned_ids = query.where('pinned_at IS NOT NULL AND category_id = ?', category.id)
+                      .limit(nil)
                       .order('pinned_at DESC').pluck(:id)
     non_pinned_ids = query.where('pinned_at IS NULL OR category_id <> ?', category.id).pluck(:id)
-
-    (pinned_ids + non_pinned_ids)[0...@options[:per_page]]
+    (pinned_ids + non_pinned_ids)
   end
 
   def list_new_in_category(category)
@@ -188,7 +234,7 @@ class TopicQuery
     end
 
     topics = topics.to_a.each do |t|
-      t.allowed_user_ids = filter == :private_messags ? t.allowed_users.map{|u| u.id} : []
+      t.allowed_user_ids = filter == :private_messages ? t.allowed_users.map{|u| u.id} : []
     end
 
     list = TopicList.new(filter, @user, topics.to_a, options.merge(@options))
@@ -281,6 +327,10 @@ class TopicQuery
       options.reverse_merge!(@options)
       options.reverse_merge!(per_page: per_page_setting)
 
+      # Whether to return visible topics
+      options[:visible] = true if @user.nil? || @user.regular?
+      options[:visible] = false if @user && @user.id == options[:filtered_to_user]
+
       # Start with a list of all topics
       result = Topic.unscoped
 
@@ -310,7 +360,8 @@ class TopicQuery
       end
 
       result = result.limit(options[:per_page]) unless options[:limit] == false
-      result = result.visible if options[:visible] || @user.nil? || @user.regular?
+
+      result = result.visible if options[:visible]
       result = result.where.not(topics: {id: options[:except_topic_ids]}).references(:topics) if options[:except_topic_ids]
       result = result.offset(options[:page].to_i * options[:per_page]) if options[:page]
 

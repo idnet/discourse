@@ -51,6 +51,9 @@ required:
     client: true
     default: '/images/default-favicon.ico'
   apple_touch_icon_url: '/images/default-apple-touch-icon.png'
+  exclude_rel_nofollow_domains:
+    default: ''
+    type: list
 
 basic:
   default_locale:
@@ -142,7 +145,7 @@ basic:
     default: 'BF1E2E|F1592A|F7941D|9EB83B|3AB54A|12A89D|25AAE2|0E76BD|652D90|92278F|ED207B|8C6238|231F20|808281|B3B5B4|283890'
   category_style:
     client: true
-    default: 'bar'
+    default: 'bullet'
     enum: 'CategoryStyleSetting'
     preview: '<span class="badge-wrapper {{value}}"><span class="badge-category-parent-bg" style="background-color: #aaa;"></span><span class="badge-category-bg" style="background-color: #777;"></span><span style="color: #fff;" data-drop-close="true" class="badge-category clear-badge">Category</span></span>'
   enable_mobile_theme:
@@ -165,6 +168,11 @@ basic:
   fixed_category_positions:
     client: true
     default: false
+
+  fixed_category_positions_on_create:
+    client: true
+    default: false
+
   show_subcategory_list:
     default: false
     client: true
@@ -188,11 +196,6 @@ login:
   allow_new_registrations:
     client: true
     default: true
-  # The default value of enable_google_logins changed from true to false.
-  # See db/migrate/20140521220115_google_openid_default_has_changed.rb
-  enable_google_logins:
-    client: true
-    default: false
   enable_google_oauth2_logins:
     client: true
     default: false
@@ -246,6 +249,7 @@ login:
   sso_overrides_avatar:
     default: false
     client: true
+  sso_not_approved_url: ''
   email_domains_blacklist:
     default: 'mailinator.com'
     type: list
@@ -282,6 +286,9 @@ users:
   logout_redirect:
     client: true
     default: ''
+  full_name_required:
+    client: true
+    default: false
   enable_names:
     client: true
     default: true
@@ -309,6 +316,17 @@ users:
   staff_user_custom_fields:
     type: list
     default: ''
+  enable_user_directory:
+    client: true
+    default: true
+  allow_anonymous_posting:
+    default: false
+    client: true
+  anonymous_posting_min_trust_level:
+    default: 1
+    client: true
+  anonymous_account_duration_minutes:
+    default: 10080
 
 posting:
   min_post_length:
@@ -388,7 +406,7 @@ posting:
   max_mentions_per_post: 10
   newuser_max_replies_per_topic: 3
   newuser_max_mentions_per_post: 2
-  max_word_length: 30
+  title_max_word_length: 30
   newuser_max_links: 2
   newuser_max_images:
     client: true
@@ -403,6 +421,9 @@ posting:
   display_name_on_posts:
     client: true
     default: false
+  show_time_gap_days:
+    default: 4
+    client: true
   short_progress_text_threshold:
     client: true
     default: 10000
@@ -433,6 +454,14 @@ posting:
     enum: 'EmojiSetSiteSetting'
   enforce_square_emoji:
     default: true
+  approve_post_count:
+    default: 0
+  approve_unless_trust_level:
+    default: 0
+    enum: 'TrustLevelSetting'
+  notify_about_queued_posts_after:
+    default: 24
+    min: 0
 
 email:
   email_time_window_mins:
@@ -481,7 +510,7 @@ files:
     default: 3072
   max_attachment_size_kb:
     client: true
-    default: 1024
+    default: 3072
   authorized_extensions:
     client: true
     default: 'jpg|jpeg|png|gif'
@@ -501,27 +530,32 @@ files:
     default:
       test: false
       default: true
-  download_remote_images_threshold: 20
+  download_remote_images_threshold: 10
   disabled_image_download_domains:
     type: list
     default: ''
   create_thumbnails: true
-  clean_up_uploads: false
+  clean_up_uploads: true
   clean_orphan_uploads_grace_period_hours: 1
   purge_deleted_uploads_grace_period_days: 30
   prevent_anons_from_downloading_files:
     default: false
     client: true
-  enable_s3_uploads: false
+  enable_s3_uploads:
+    default: false
+    client: true
   s3_use_iam_profile: false
   s3_access_key_id: ''
   s3_secret_access_key: ''
   s3_region:
-    default: ''
+    default: 'us-east-1'
     enum: 'S3RegionSiteSetting'
   s3_upload_bucket:
     default: ''
-    regex: "^[^A-Z._]+$"
+    regex: '^[^A-Z_.]+$' # can't use '.' when using HTTPS
+  s3_cdn_url:
+    default: ''
+    regex: '^https?:\/\/.+[^\/]$'
   allow_profile_backgrounds:
     client: true
     default: true
@@ -532,11 +566,14 @@ files:
   allow_animated_avatars:
     client: true
     default: false
-  allow_animated_thumbnails: false
+  allow_animated_thumbnails: true
   default_avatars:
     default: ''
     type: url_list
     client: true
+  avatar_sizes:
+    default: '20|25|32|45|60|120'
+    type: list
 
 trust:
   default_trust_level:
@@ -596,7 +633,9 @@ trust:
   tl3_requires_likes_received:
     default: 20
     min: 0
-  tl3_links_no_follow: false
+  tl3_links_no_follow:
+    default: false
+    client: true
 
 security:
   use_https: false
@@ -617,9 +656,6 @@ onebox:
 
 spam:
   add_rel_nofollow_to_user_content: true
-  exclude_rel_nofollow_domains:
-    default: ''
-    type: list
   flags_required_to_hide_post: 3
   cooldown_minutes_after_hiding_posts: 10
   num_flags_to_block_new_user: 3
@@ -658,8 +694,12 @@ rate_limits:
   max_flags_per_day: 20
   max_edits_per_day: 30
   max_invites_per_day: 10
+  max_topic_invitations_per_day: 30
   max_topics_in_first_day: 5
   max_replies_in_first_day: 10
+  tl2_additional_likes_per_day_multiplier: 1.5
+  tl3_additional_likes_per_day_multiplier: 2
+  tl4_additional_likes_per_day_multiplier: 3
 
 developer:
   force_hostname:
@@ -699,16 +739,19 @@ developer:
     default: 15000
   flush_timings_secs:
     client: true
-    default: 10
+    default: 20
   active_user_rate_limit_secs: 60
   verbose_localization:
     default: false
     client: true
+  migrate_to_new_scheme:
+    hidden: true
+    default: false
 
 embedding:
-  embeddable_host:
-      default: ''
-      regex: "^(?!http).+" # don't allow this to start with http:// or https://
+  embeddable_hosts:
+    default: ''
+    type: host_list
   feed_polling_enabled: false
   feed_polling_url: ''
   embed_by_username:
@@ -748,7 +791,7 @@ backups:
   s3_backup_bucket:
     client: false
     default: ''
-    regex: "^[^\\.]*$"
+    regex: "^[^A-Z_.]+$" # can't use '.' when using HTTPS
 
 uncategorized:
   version_checks:
@@ -760,6 +803,10 @@ uncategorized:
   suppress_uncategorized_badge:
     client: true
     default: true
+
+  slug_generation_method:
+    default: 'ascii'
+    enum: 'SlugSetting'
 
   # Search
   min_search_term_length:
@@ -819,10 +866,10 @@ uncategorized:
     default: 14
   cold_age_days_medium:
     client: true
-    default: 60
+    default: 90
   cold_age_days_high:
     client: true
-    default: 120
+    default: 180
 
   # Warnings
   educate_until_posts: 2
@@ -865,6 +912,8 @@ uncategorized:
   last_vacuum:
     default: 0
     hidden: true
+
+  delete_drafts_older_than_n_days: 180
 
   tos_topic_id:
     default: -1

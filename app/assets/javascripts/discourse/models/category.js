@@ -75,7 +75,8 @@ Discourse.Category = Discourse.Model.extend({
         parent_category_id: this.get('parent_category_id'),
         logo_url: this.get('logo_url'),
         background_url: this.get('background_url'),
-        allow_badges: this.get('allow_badges')
+        allow_badges: this.get('allow_badges'),
+        custom_fields: this.get('custom_fields')
       },
       type: this.get('id') ? 'PUT' : 'POST'
     });
@@ -90,7 +91,7 @@ Discourse.Category = Discourse.Model.extend({
   }.property("permissions"),
 
   destroy: function() {
-    return Discourse.ajax("/categories/" + (this.get('slug') || this.get('id')), { type: 'DELETE' });
+    return Discourse.ajax("/categories/" + (this.get('id') || this.get('slug')), { type: 'DELETE' });
   },
 
   addPermission: function(permission){
@@ -215,6 +216,14 @@ Discourse.Category.reopenClass({
   },
 
   list: function() {
+    if (Discourse.SiteSettings.fixed_category_positions) {
+      return Discourse.Site.currentProp('categories');
+    } else {
+      return Discourse.Site.currentProp('sortedCategories');
+    }
+  },
+
+  listByActivity: function() {
     return Discourse.Site.currentProp('sortedCategories');
   },
 

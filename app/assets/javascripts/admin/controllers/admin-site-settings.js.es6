@@ -1,4 +1,6 @@
-export default Ember.ArrayController.extend(Discourse.Presence, {
+import Presence from 'discourse/mixins/presence';
+
+export default Ember.ArrayController.extend(Presence, {
   filter: null,
   onlyOverridden: false,
   filtered: Ember.computed.notEmpty('filter'),
@@ -37,6 +39,11 @@ export default Ember.ArrayController.extend(Discourse.Presence, {
       });
       if (matches.length > 0) {
         matchesGroupedByCategory[0].siteSettings.pushObjects(matches);
+        matchesGroupedByCategory.pushObject({
+          nameKey: settingsCategory.nameKey,
+          name: I18n.t('admin.site_settings.categories.' + settingsCategory.nameKey),
+          siteSettings: matches
+        });
       }
     });
 

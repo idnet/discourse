@@ -1,13 +1,25 @@
 .gap {
-  background-color: scale-color-diff();
+  background-color: dark-light-diff($primary, $secondary, 90%, -60%);
   padding: 5px 15px;
   color: $primary;
   text-align: center;
   margin: 10px 0;
 }
 
+.time-gap {
+  border-bottom: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
+  color: lighten($primary, 50%);
+  padding-bottom: 3px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  font-weight: bold;
+  .topic-avatar {
+    margin: 0 5px 0 10px;
+  }
+}
+
 .topic-post {
-  border-top: 1px solid scale-color-diff();
+  border-top: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
   padding: 6px 0 3px 0;
 }
 
@@ -74,7 +86,7 @@ button {
   background-color: $secondary;
   width: 205px;
   padding: 10px;
-  border: 1px solid scale-color-diff();
+  border: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
   position: absolute;
   text-align: left;
   bottom: 0;
@@ -154,17 +166,26 @@ a.star {
 .topic-map {
 
   margin: 10px;
-  background: scale-color(scale-color-diff(), $lightness: 40%);
+  background: dark-light-diff($primary, $secondary, 97%, -45%);
+  border: 1px solid dark-light-diff($primary, $secondary, 90%, -65%);
+  border-top: none; // would cause double top border
+
+  section {
+    border-top: 1px solid dark-light-diff($primary, $secondary, 90%, -65%);
+  }
 
   h3 {
     margin-bottom: 4px;
-    color: $primary;
+    margin-top: 0;
+    color: scale-color($primary, $lightness: 20%);
     line-height: 23px;
+    font-weight: normal;
+    font-size: 1em;
   }
 
   h4 {
     margin: 0 0 3px 0;
-    color: $primary;
+    color: scale-color($primary, $lightness: 50%);
     font-weight: normal;
     font-size: 0.857em;
     line-height: 15px;
@@ -188,23 +209,15 @@ a.star {
     }
     .post-count {
       position: absolute;
-      top: 2px;
-      right: 6px;
-      padding: 0 4px;
+      right: 3px;
+      border-radius: 100px;
+      padding: 4px 5px 2px 5px;
+      text-align: center;
       font-weight: normal;
       font-size: 11px;
-      line-height: 14px;
+      line-height: 1;
     }
-
   }
-
-  /* in expanded avatar view, limit to one line for now */
-  .avatars.clearfix {
-    height:40px;
-    overflow:hidden;
-    margin-left: 10px;
-  }
-
 
   .avatar {
     float: left;
@@ -226,8 +239,11 @@ a.star {
       }
     }
     a, .number {
-      font-weight: bold;
       line-height: 20px;
+    }
+    .number, i {
+      color: scale-color($primary, $lightness: 20%);
+      font-size: 110%;
     }
 
     .avatar + a {
@@ -238,15 +254,14 @@ a.star {
     display: none;
   }
 
-  .links,
-  .information {
+  .links, .information, .avatars {
     padding: 7px 10px;
     color: $primary;
     overflow: auto;
   }
 
-  .information {
-    border-top: 2px solid scale-color-diff();
+  .participants { // PMs //
+    .user {float: left; margin: 0 10px 10px 0;}
   }
 
   .domain {
@@ -268,17 +283,11 @@ a.star {
     float: right;
     .btn {
       border: 0;
-      border-bottom: 1px solid scale-color-diff();
-      border-left: 1px solid scale-color-diff();
       padding: 0 15px;
       color: $primary;
-      background: scale-color-diff();
-      &:hover {
-        background: scale-color($primary, $lightness: 75%);
-        color: $primary;
-        border-bottom: 1px solid scale-color-diff();
-
-      }
+      background: dark-light-diff($primary, $secondary, 97%, -75%);
+      border-left: 1px solid dark-light-diff($primary, $secondary, 90%, -65%);
+      border-top: 1px solid dark-light-diff($primary, $secondary, 90%, -65%);
       .fa {
         margin: 0;
         font-size: 1.286em;
@@ -289,7 +298,7 @@ a.star {
 }
 
 #topic-footer-buttons {
-  border-top: 1px solid scale-color-diff();
+  border-top: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
   padding: 20px 10px 0 10px;
   .fa-bookmark.bookmarked { color: $tertiary; }
 }
@@ -338,7 +347,7 @@ span.post-count {
 
 .topic-post {
   &.moderator {
-    background-color: scale-color($highlight, $lightness: 75%);
+    background-color: dark-light-diff($highlight, $secondary, 70%, -80%);
   }
 }
 
@@ -387,7 +396,7 @@ iframe {
   float: left;
   width: 97%;
   padding-left: 3%;
-  background-color: dark-light-diff($tertiary, $secondary, 90%, -40%);
+  background-color: dark-light-diff($tertiary, $secondary, 85%, -65%);
   .btn {
     margin-bottom: 10px;
     color: $secondary;
@@ -423,7 +432,7 @@ button.select-post {
 
 
 .deleted {
-background-color: scale-color($danger, $lightness: 75%);
+  background-color: dark-light-diff(rgba($danger,.7), $secondary, 50%, -60%);
 }
 
 #show-topic-admin {
@@ -500,4 +509,3 @@ span.highlighted {
 .read-state {
   display: none;
 }
-

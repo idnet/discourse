@@ -1,6 +1,7 @@
 require 'cache'
 require_dependency 'plugin/instance'
 require_dependency 'auth/default_current_user_provider'
+require_dependency 'version'
 
 module Discourse
 
@@ -47,8 +48,6 @@ module Discourse
   # When ImageMagick is missing
   class ImageMagickMissing < StandardError; end
 
-  class InvalidPost < StandardError; end
-
   # When read-only mode is enabled
   class ReadOnly < StandardError; end
 
@@ -56,7 +55,7 @@ module Discourse
   class CSRF < StandardError; end
 
   def self.filters
-    @filters ||= [:latest, :unread, :new, :read, :posted, :bookmarks]
+    @filters ||= [:latest, :unread, :new, :read, :posted, :bookmarks, :search]
   end
 
   def self.feed_filters
@@ -64,7 +63,7 @@ module Discourse
   end
 
   def self.anonymous_filters
-    @anonymous_filters ||= [:latest, :top, :categories]
+    @anonymous_filters ||= [:latest, :top, :categories, :search]
   end
 
   def self.logged_in_filters
@@ -79,9 +78,47 @@ module Discourse
     @anonymous_top_menu_items ||= Discourse.anonymous_filters + [:category, :categories, :top]
   end
 
+  PIXEL_RATIOS ||= [1, 2, 3]
+
+  def self.avatar_sizes
+    # TODO: should cache these when we get a notification system for site settings
+    set = Set.new
+
+    SiteSetting.avatar_sizes.split("|").map(&:to_i).each do |size|
+      PIXEL_RATIOS.each do |pixel_ratio|
+        set << size * pixel_ratio
+      end
+    end
+
+    set
+  end
+
   def self.activate_plugins!
-    @plugins = Plugin::Instance.find_all("#{Rails.root}/plugins")
-    @plugins.each { |plugin| plugin.activate! }
+    all_plugins = Plugin::Instance.find_all("#{Rails.root}/plugins")
+
+    @plugins = []
+    all_plugins.each do |p|
+      v = p.metadata.required_version || Discourse::VERSION::STRING
+      if Discourse.has_needed_version?(Discourse::VERSION::STRING, v)
+        p.activate!
+        @plugins << p
+      else
+        STDERR.puts "Could not activate #{p.metadata.name}, discourse does not meet required version (#{v})"
+      end
+    end
+  end
+
+  def self.recently_readonly?
+    return false unless @last_read_only
+    @last_read_only > 15.seconds.ago
+  end
+
+  def self.received_readonly!
+    @last_read_only = Time.now
+  end
+
+  def self.clear_readonly!
+    @last_read_only = nil
   end
 
   def self.disabled_plugin_names
@@ -193,7 +230,7 @@ module Discourse
   end
 
   def self.readonly_mode?
-    !!$redis.get(readonly_mode_key)
+    recently_readonly? || !!$redis.get(readonly_mode_key)
   end
 
   def self.request_refresh!
@@ -214,7 +251,7 @@ module Discourse
     begin
       $git_version ||= `git rev-parse HEAD`.strip
     rescue
-      $git_version = "unknown"
+      $git_version = Discourse::VERSION::STRING
     end
   end
 
@@ -234,7 +271,7 @@ module Discourse
     user ||= User.admins.real.order(:id).first
   end
 
-  SYSTEM_USER_ID = -1 unless defined? SYSTEM_USER_ID
+  SYSTEM_USER_ID ||= -1
 
   def self.system_user
     User.find_by(id: SYSTEM_USER_ID)
@@ -274,6 +311,7 @@ module Discourse
   # after fork, otherwise Discourse will be
   # in a bad state
   def self.after_fork
+    # note: all this reconnecting may no longer be needed per https://github.com/redis/redis-rb/pull/414
     current_db = RailsMultisite::ConnectionManagement.current_db
     RailsMultisite::ConnectionManagement.establish_connection(db: current_db)
     MessageBus.after_fork

@@ -1,7 +1,23 @@
-import TopicDetails from 'discourse/models/topic-details';
-import PostStream from 'discourse/models/post-stream';
+import RestModel from 'discourse/models/rest';
 
-const Topic = Discourse.Model.extend({
+const Topic = RestModel.extend({
+  message: null,
+  errorTitle: null,
+  errorLoading: false,
+
+  fancyTitle: function() {
+    let title = this.get("fancy_title");
+
+    if (Discourse.SiteSettings.enable_emoji && title.indexOf(":") >= 0) {
+      title = title.replace(/:[^\s:]+:?/g, function(m) {
+        const emoji = Discourse.Emoji.translations[m] ? Discourse.Emoji.translations[m] : m.slice(1, m.length - 1),
+              url = Discourse.Emoji.urlFor(emoji);
+        return url ? "<img src='" + url + "' title='" + emoji + "' alt='" + emoji + "' class='emoji'>" : m;
+      });
+    }
+
+    return title;
+  }.property("fancy_title"),
 
   // returns createdAt if there's no bumped date
   bumpedAt: function() {
@@ -23,7 +39,7 @@ const Topic = Discourse.Model.extend({
   }.property('created_at'),
 
   postStream: function() {
-    return PostStream.create({topic: this});
+    return this.store.createRecord('postStream', {id: this.get('id'), topic: this});
   }.property(),
 
   replyCount: function() {
@@ -31,7 +47,7 @@ const Topic = Discourse.Model.extend({
   }.property('posts_count'),
 
   details: function() {
-    return TopicDetails.create({topic: this});
+    return this.store.createRecord('topicDetails', {id: this.get('id'), topic: this});
   }.property(),
 
   invisible: Em.computed.not('visible'),
@@ -41,18 +57,18 @@ const Topic = Discourse.Model.extend({
     return ({ type: 'topic', id: this.get('id') });
   }.property('id'),
 
-  category: function() {
-    const categoryId = this.get('category_id');
-    if (categoryId) {
-      return Discourse.Category.list().findProperty('id', categoryId);
-    }
+  _categoryIdChanged: function() {
+    this.set('category', Discourse.Category.findById(this.get('category_id')));
+  }.observes('category_id').on('init'),
 
+  _categoryNameChanged: function() {
     const categoryName = this.get('categoryName');
+    let category;
     if (categoryName) {
-      return Discourse.Category.list().findProperty('name', categoryName);
+      category = Discourse.Category.list().findProperty('name', categoryName);
     }
-    return null;
-  }.property('category_id', 'categoryName'),
+    this.set('category', category);
+  }.observes('categoryName'),
 
   categoryClass: function() {
     return 'category-' + this.get('category.fullSlug');
@@ -347,8 +363,7 @@ const Topic = Discourse.Model.extend({
     );
   },
 
-  excerptNotEmpty: Em.computed.notEmpty('excerpt'),
-  hasExcerpt: Em.computed.and('pinned', 'excerptNotEmpty'),
+  hasExcerpt: Em.computed.notEmpty('excerpt'),
 
   excerptTruncated: function() {
     const e = this.get('excerpt');
@@ -408,7 +423,6 @@ Topic.reopenClass({
       // The title can be cleaned up server side
       props.title = result.basic_topic.title;
       props.fancy_title = result.basic_topic.fancy_title;
-
       topic.setProperties(props);
     });
   },
@@ -417,16 +431,6 @@ Topic.reopenClass({
     const result = this._super.apply(this, arguments);
     this.createActionSummary(result);
     return result;
-  },
-
-  findSimilarTo(title, body) {
-    return Discourse.ajax("/topics/similar_to", { data: {title: title, raw: body} }).then(function (results) {
-      if (Array.isArray(results)) {
-        return results.map(function(topic) { return Topic.create(topic); });
-      } else {
-        return Ember.A();
-      }
-    });
   },
 
   // Load a topic, but accepts a set of filters

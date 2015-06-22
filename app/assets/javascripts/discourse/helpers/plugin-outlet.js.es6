@@ -99,7 +99,23 @@ function buildConnectorCache() {
   });
 }
 
-export default function(connectionName, options) {
+var _viewInjections;
+function viewInjections(container) {
+  if (_viewInjections) { return _viewInjections; }
+
+  const injections = container._registry.getTypeInjections('view');
+
+  _viewInjections = {};
+  injections.forEach(function(i) {
+    _viewInjections[i.property] = container.lookup(i.fullName);
+  });
+
+  return _viewInjections;
+}
+
+Ember.HTMLBars._registerHelper('plugin-outlet', function(params, hash, options, env) {
+  const connectionName = params[0];
+
   if (!_connectorCache) { buildConnectorCache(); }
 
   if (_connectorCache[connectionName]) {
@@ -110,9 +126,9 @@ export default function(connectionName, options) {
     const viewClass = (childViews.length > 1) ? Ember.ContainerView : childViews[0];
 
     delete options.fn;  // we don't need the default template since we have a connector
-    Ember.Handlebars.helpers.view.call(this, viewClass, options);
+    env.helpers.view.helperFunction.call(this, [viewClass], viewInjections(env.data.view.container), options, env);
 
-    const cvs = options.data.view._childViews;
+    const cvs = env.data.view._childViews;
     if (childViews.length > 1 && cvs && cvs.length) {
       const inserted = cvs[cvs.length-1];
       if (inserted) {
@@ -121,16 +137,5 @@ export default function(connectionName, options) {
         });
       }
     }
-  } else if (options.fn) {
-    // If a block is passed, render its content.
-    return Ember.Handlebars.helpers.view.call(this,
-              Ember.View.extend({
-                isVirtual: true,
-                tagName: '',
-                template: function() {
-                  return options.hash.template;
-                }.property()
-              }),
-            options);
   }
-}
+});

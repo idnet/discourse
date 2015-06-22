@@ -426,7 +426,7 @@ class Search
 
     def self.ts_query(term, locale = nil, joiner = "&")
       locale = Post.sanitize(locale) if locale
-      all_terms = term.gsub(/[*:()&!'"]/,'').squish.split
+      all_terms = term.gsub(/[\p{P}\p{S}]+/, ' ').squish.split
       query = Post.sanitize(all_terms.map {|t| "#{PG::Connection.escape_string(t)}:*"}.join(" #{joiner} "))
       "TO_TSQUERY(#{locale || query_locale}, #{query})"
     end
@@ -451,10 +451,6 @@ class Search
 
       # double wrapping so we get correct row numbers
       post_sql = "SELECT *, row_number() over() row_number FROM (#{post_sql}) xxx"
-
-      # p Topic.exec_sql(post_sql).to_a
-      # puts post_sql
-      # p Topic.exec_sql("SELECT topic_id FROM topic_allowed_users WHERE user_id = 2").to_a
 
       posts = Post.includes(:topic => :category)
                   .joins("JOIN (#{post_sql}) x ON x.id = posts.topic_id AND x.post_number = posts.post_number")

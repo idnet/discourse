@@ -22,7 +22,7 @@
     td, th {
       padding: 0.5em;
       text-align: left;
-      border-bottom: 1px solid scale-color-diff();
+      border-bottom: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
 
       .number, .time-read {
         font-size: 1.4em;
@@ -32,7 +32,7 @@
 
     tr.me {
       td {
-        background-color: scale-color($highlight, $lightness: 50%);
+        background-color: dark-light-diff($highlight, $secondary, 70%, -80%);
 
         .username a, .name, .title, .number, .time-read {
           color: scale-color($highlight, $lightness: -50%);
@@ -54,7 +54,7 @@
       }
 
       &:hover {
-        background-color: scale-color-diff();
+        background-color: dark-light-diff($primary, $secondary, 90%, -60%);
       }
     }
   }

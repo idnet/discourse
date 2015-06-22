@@ -249,12 +249,14 @@ class ImportScripts::Base
         elsif u[:email].present?
           new_user = create_user(u, import_id)
 
-          if new_user.valid?
+          if new_user.valid? && new_user.user_profile.valid?
             @existing_users[import_id.to_s] = new_user.id
             users_created += 1
           else
             @failed_users << u
-            puts "Failed to create user id: #{import_id}, username: #{new_user.username}, email: #{new_user.email}: #{new_user.errors.full_messages}"
+            puts "Failed to create user id: #{import_id}, username: #{new_user.username}, email: #{new_user.email}"
+            puts "user errors: #{new_user.errors.full_messages}"
+            puts "user_profile errors: #{new_user.user_profiler.errors.full_messages}"
           end
         else
           @failed_users << u
@@ -368,7 +370,9 @@ class ImportScripts::Base
       user_id: opts[:user_id] || opts[:user].try(:id) || -1,
       position: opts[:position],
       description: opts[:description],
-      parent_category_id: opts[:parent_category_id]
+      parent_category_id: opts[:parent_category_id],
+      color: opts[:color] || "AB9364",
+      text_color: opts[:text_color] || "FFF",
     )
 
     new_category.custom_fields["import_id"] = import_id if import_id
@@ -618,7 +622,11 @@ class ImportScripts::Base
     progress_count = 0
 
     User.find_each do |user|
-      user.change_trust_level!(0) if Post.where(user_id: user.id).count == 0
+      begin
+        user.change_trust_level!(0) if Post.where(user_id: user.id).count == 0
+      rescue Discourse::InvalidAccess
+        nil
+      end
       progress_count += 1
       print_status(progress_count, total_count)
     end
@@ -642,6 +650,12 @@ class ImportScripts::Base
 
   def print_status(current, max)
     print "\r%9d / %d (%5.1f%%)  " % [current, max, ((current.to_f / max.to_f) * 100).round(1)]
+  end
+
+  def print_spinner
+    @spinner_chars ||= %w{ | / - \\ }
+    @spinner_chars.push @spinner_chars.shift
+    print "\b#{@spinner_chars[0]}"
   end
 
   def batches(batch_size)

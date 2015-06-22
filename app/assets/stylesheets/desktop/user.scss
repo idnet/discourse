@@ -22,14 +22,16 @@
 }
 
 .user-preferences {
-  input.category-group {
-    width: 500px;
+  input.category-group, input.user-selector {
+    width: 530px;
   }
 
   textarea {
     width: 530px;
     height: 100px;
   }
+
+  input
 
   input[type=text] {
     @include small-width {
@@ -143,7 +145,7 @@
   .user-content {
     padding: 10px 8px;
     background-color: $secondary;
-    border: 1px solid scale-color-diff();
+    border: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
     margin-bottom: 10px;
     box-sizing: border-box;
 
@@ -161,13 +163,13 @@
 
       th {
         text-align: left;
-        border-bottom: 1px solid scale-color-diff();
+        border-bottom: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
         padding: 5px;
       }
 
       td {
         padding: 5px;
-        border-bottom: 1px solid scale-color-diff();
+        border-bottom: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
       }
     }
 
@@ -400,9 +402,6 @@
 
 
   .user-stream {
-    .category {
-      margin-left: 3px;
-    }
     .excerpt {
       margin: 5px 0;
       font-size: 0.929em;
@@ -423,7 +422,7 @@
     .item {
       padding: 20px 8px 15px 8px;
       background-color: $secondary;
-      border-bottom: 1px solid scale-color-diff();
+      border-bottom: 1px solid dark-light-diff($primary, $secondary, 90%, -60%);
     }
     .type {
       color: $primary;
@@ -446,21 +445,17 @@
       margin-right: 4px;
     }
     .title {
-      display: block;
       font-size: 1em;
-      max-width: 80%;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
     .name {
-      display: inline-block;
       font-size: 1em;
       max-width: 400px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      vertical-align: middle;
     }
     .edit-reason {
       background-color: scale-color($highlight, $lightness: 25%);
@@ -472,7 +467,7 @@
     }
     .notification {
       &.unread {
-        background-color: dark-light-diff($tertiary, $secondary, 90%, -60%);
+        background-color: dark-light-diff($tertiary, $secondary, 85%, -65%);
       }
 
       li { display: inline-block; }
@@ -580,14 +575,6 @@
 }
 
 .paginated-topics-list {
-  .topic-list > tbody > tr:nth-child(odd) {
-    background-color: darken($secondary, 3%);
-  }
-
-  .topic-list > tbody > tr:nth-child(even) {
-    background-color: $secondary;
-  }
-
   .user-content {
     width: 100%;
     margin-top: 0;

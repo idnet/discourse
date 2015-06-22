@@ -6,6 +6,7 @@ require_dependency 'enum'
 require_dependency 'post_analyzer'
 require_dependency 'validators/post_validator'
 require_dependency 'plugin/filter'
+require_dependency 'email_cook'
 
 require 'archetype'
 require 'digest/sha1'
@@ -76,7 +77,7 @@ class Post < ActiveRecord::Base
   end
 
   def self.cook_methods
-    @cook_methods ||= Enum.new(:regular, :raw_html)
+    @cook_methods ||= Enum.new(:regular, :raw_html, :email)
   end
 
   def self.find_by_detail(key, value)
@@ -88,7 +89,7 @@ class Post < ActiveRecord::Base
   end
 
   def limit_posts_per_day
-    if user.created_at > 1.day.ago && post_number > 1
+    if user.first_day_user? && post_number > 1
       RateLimiter.new(user, "first-day-replies-per-day", SiteSetting.max_replies_in_first_day, 1.day.to_i)
     end
   end
@@ -161,16 +162,20 @@ class Post < ActiveRecord::Base
     # case we can skip the rendering pipeline.
     return raw if cook_method == Post.cook_methods[:raw_html]
 
-    # Default is to cook posts
-    cooked = if !self.user || SiteSetting.tl3_links_no_follow || !self.user.has_trust_level?(TrustLevel[3])
-               post_analyzer.cook(*args)
-             else
-               # At trust level 3, we don't apply nofollow to links
-               cloned = args.dup
-               cloned[1] ||= {}
-               cloned[1][:omit_nofollow] = true
-               post_analyzer.cook(*cloned)
-             end
+    cooked = nil
+    if cook_method == Post.cook_methods[:email]
+      cooked = EmailCook.new(raw).cook
+    else
+      cooked = if !self.user || SiteSetting.tl3_links_no_follow || !self.user.has_trust_level?(TrustLevel[3])
+                 post_analyzer.cook(*args)
+               else
+                 # At trust level 3, we don't apply nofollow to links
+                 cloned = args.dup
+                 cloned[1] ||= {}
+                 cloned[1][:omit_nofollow] = true
+                 post_analyzer.cook(*cloned)
+               end
+    end
 
     new_cooked = Plugin::Filter.apply(:after_post_cook, self, cooked)
 
@@ -221,7 +226,7 @@ class Post < ActiveRecord::Base
 
     TopicLink.where(domain: hosts.keys, user_id: acting_user.id)
              .group(:domain, :post_id)
-             .count.keys.each do |tuple|
+             .count.each_key do |tuple|
       domain = tuple[0]
       hosts[domain] = (hosts[domain] || 0) + 1
     end
@@ -315,7 +320,9 @@ class Post < ActiveRecord::Base
   end
 
   def is_first_post?
-    post_number == 1
+    post_number.blank? ?
+      topic.try(:highest_post_number) == 0 :
+      post_number == 1
   end
 
   def is_flagged?
@@ -324,7 +331,7 @@ class Post < ActiveRecord::Base
 
   def unhide!
     self.update_attributes(hidden: false, hidden_at: nil, hidden_reason_id: nil)
-    self.topic.update_attributes(visible: true) if post_number == 1
+    self.topic.update_attributes(visible: true) if is_first_post?
     save(validate: false)
     publish_change_to_clients!(:acted)
   end
@@ -369,12 +376,10 @@ class Post < ActiveRecord::Base
     problems
   end
 
-  def rebake!(opts={})
-    new_cooked = cook(
-      raw,
-      topic_id: topic_id,
-      invalidate_oneboxes: opts.fetch(:invalidate_oneboxes, false)
-    )
+  def rebake!(opts=nil)
+    opts ||= {}
+
+    new_cooked = cook(raw, topic_id: topic_id, invalidate_oneboxes: opts.fetch(:invalidate_oneboxes, false))
     old_cooked = cooked
 
     update_columns(cooked: new_cooked, baked_at: Time.new, baked_version: BAKED_VERSION)
@@ -523,6 +528,22 @@ class Post < ActiveRecord::Base
       attribute = "version" if attribute == "cached_version"
       write_attribute(attribute, change[0])
     end
+  end
+
+  def self.rebake_all_quoted_posts(user_id)
+    return if user_id.blank?
+
+    Post.exec_sql <<-SQL
+      WITH user_quoted_posts AS (
+        SELECT post_id
+          FROM quoted_posts
+         WHERE quoted_post_id IN (SELECT id FROM posts WHERE user_id = #{user_id})
+      )
+      UPDATE posts
+         SET baked_version = NULL
+       WHERE baked_version IS NOT NULL
+         AND id IN (SELECT post_id FROM user_quoted_posts)
+    SQL
   end
 
   private

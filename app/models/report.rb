@@ -62,10 +62,10 @@ class Report
     filtered_results = data.where('date >= ? AND date <= ?', report.start_date.to_date, report.end_date.to_date)
 
     report.data = []
-    filtered_results.group(:date)
+    filtered_results.order(date: :asc)
+                    .group(:date)
                     .sum(:count)
                     .each do |date, count|
-
       report.data << {x: date, y: count}
     end
 
@@ -76,6 +76,7 @@ class Report
 
   def self.report_visits(report)
     basic_report_about report, UserVisit, :by_day, report.start_date, report.end_date
+    add_counts report, UserVisit, 'visited_at'
   end
 
   def self.report_signups(report)

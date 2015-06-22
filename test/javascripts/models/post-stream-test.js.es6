@@ -1,32 +1,68 @@
 module("model:post-stream");
 
-import PostStream from 'discourse/models/post-stream';
-import Topic from 'discourse/models/topic';
+import createStore from 'helpers/create-store';
 
-var buildStream = function(id, stream) {
-  var topic = Topic.create({id: id, chunk_size: 5});
-  var ps = topic.get('postStream');
+const buildStream = function(id, stream) {
+  const store = createStore();
+  const topic = store.createRecord('topic', {id, chunk_size: 5});
+  const ps = topic.get('postStream');
   if (stream) {
     ps.set('stream', stream);
   }
   return ps;
 };
 
-var participant = {username: 'eviltrout'};
+const participant = {username: 'eviltrout'};
 
 test('create', function() {
-  ok(PostStream.create(), 'it can be created with no parameters');
+  const store = createStore();
+  ok(store.createRecord('postStream'), 'it can be created with no parameters');
 });
 
 test('defaults', function() {
-  var postStream = buildStream(1234);
+  const postStream = buildStream(1234);
   blank(postStream.get('posts'), "there are no posts in a stream by default");
   ok(!postStream.get('loaded'), "it has never loaded");
   present(postStream.get('topic'));
 });
 
+test('daysSincePrevious when appending', function(assert) {
+  const postStream = buildStream(10000001, [1,2,3]);
+  const store = postStream.store;
+
+  const p1 = store.createRecord('post', {id: 1, post_number: 1, created_at: "2015-05-29T18:17:35.868Z"}),
+        p2 = store.createRecord('post', {id: 2, post_number: 2, created_at: "2015-06-01T01:07:25.761Z"}),
+        p3 = store.createRecord('post', {id: 3, post_number: 3, created_at: "2015-06-02T01:07:25.761Z"});
+
+  postStream.appendPost(p1);
+  postStream.appendPost(p2);
+  postStream.appendPost(p3);
+
+  assert.ok(!p1.get('daysSincePrevious'));
+  assert.equal(p2.get('daysSincePrevious'), 2);
+  assert.equal(p3.get('daysSincePrevious'), 1);
+});
+
+test('daysSincePrevious when prepending', function(assert) {
+  const postStream = buildStream(10000001, [1,2,3]);
+  const store = postStream.store;
+
+  const p1 = store.createRecord('post', {id: 1, post_number: 1, created_at: "2015-05-29T18:17:35.868Z"}),
+        p2 = store.createRecord('post', {id: 2, post_number: 2, created_at: "2015-06-01T01:07:25.761Z"}),
+        p3 = store.createRecord('post', {id: 3, post_number: 3, created_at: "2015-06-02T01:07:25.761Z"});
+
+  postStream.prependPost(p3);
+  postStream.prependPost(p2);
+  postStream.prependPost(p1);
+
+  assert.ok(!p1.get('daysSincePrevious'));
+  assert.equal(p2.get('daysSincePrevious'), 2);
+  assert.equal(p3.get('daysSincePrevious'), 1);
+});
+
 test('appending posts', function() {
-  var postStream = buildStream(4567, [1, 3, 4]);
+  const postStream = buildStream(4567, [1, 3, 4]);
+  const store = postStream.store;
 
   equal(postStream.get('lastPostId'), 4, "the last post id is 4");
 
@@ -35,24 +71,23 @@ test('appending posts', function() {
   ok(!postStream.get('loadedAllPosts'), "the last post is not loaded");
   equal(postStream.get('posts.length'), 0, "it has no posts initially");
 
-  postStream.appendPost(Discourse.Post.create({id: 2, post_number: 2}));
+  postStream.appendPost(store.createRecord('post', {id: 2, post_number: 2}));
   ok(!postStream.get('firstPostPresent'), "the first post is still not loaded");
   equal(postStream.get('posts.length'), 1, "it has one post in the stream");
 
-  postStream.appendPost(Discourse.Post.create({id: 4, post_number: 4}));
+  postStream.appendPost(store.createRecord('post', {id: 4, post_number: 4}));
   ok(!postStream.get('firstPostPresent'), "the first post is still loaded");
   ok(postStream.get('loadedAllPosts'), "the last post is now loaded");
   equal(postStream.get('posts.length'), 2, "it has two posts in the stream");
 
-  postStream.appendPost(Discourse.Post.create({id: 4, post_number: 4}));
+  postStream.appendPost(store.createRecord('post', {id: 4, post_number: 4}));
   equal(postStream.get('posts.length'), 2, "it will not add the same post with id twice");
 
-  var stagedPost = Discourse.Post.create({raw: 'incomplete post'});
+  const stagedPost = store.createRecord('post', {raw: 'incomplete post'});
   postStream.appendPost(stagedPost);
   equal(postStream.get('posts.length'), 3, "it can handle posts without ids");
   postStream.appendPost(stagedPost);
   equal(postStream.get('posts.length'), 3, "it won't add the same post without an id twice");
-
 
   // change the stream
   postStream.set('stream', [1, 2, 4]);
@@ -61,12 +96,13 @@ test('appending posts', function() {
 });
 
 test('closestPostNumberFor', function() {
-  var postStream = buildStream(1231);
+  const postStream = buildStream(1231);
+  const store = postStream.store;
 
   blank(postStream.closestPostNumberFor(1), "there is no closest post when nothing is loaded");
 
-  postStream.appendPost(Discourse.Post.create({id: 1, post_number: 2}));
-  postStream.appendPost(Discourse.Post.create({id: 2, post_number: 3}));
+  postStream.appendPost(store.createRecord('post', {id: 1, post_number: 2}));
+  postStream.appendPost(store.createRecord('post', {id: 2, post_number: 3}));
 
   equal(postStream.closestPostNumberFor(2), 2, "If a post is in the stream it returns its post number");
   equal(postStream.closestPostNumberFor(3), 3, "If a post is in the stream it returns its post number");
@@ -75,7 +111,7 @@ test('closestPostNumberFor', function() {
 });
 
 test('updateFromJson', function() {
-  var postStream = buildStream(1231);
+  const postStream = buildStream(1231);
 
   postStream.updateFromJson({
     posts: [{id: 1}],
@@ -90,11 +126,12 @@ test('updateFromJson', function() {
 });
 
 test("removePosts", function() {
-  var postStream = buildStream(10000001, [1,2,3]);
+  const postStream = buildStream(10000001, [1,2,3]);
+  const store = postStream.store;
 
-  var p1 = Discourse.Post.create({id: 1, post_number: 2}),
-      p2 = Discourse.Post.create({id: 2, post_number: 3}),
-      p3 = Discourse.Post.create({id: 3, post_number: 4});
+  const p1 = store.createRecord('post', {id: 1, post_number: 2}),
+        p2 = store.createRecord('post', {id: 2, post_number: 3}),
+        p3 = store.createRecord('post', {id: 3, post_number: 4});
 
   postStream.appendPost(p1);
   postStream.appendPost(p2);
@@ -111,7 +148,7 @@ test("removePosts", function() {
 });
 
 test("cancelFilter", function() {
-  var postStream = buildStream(1235);
+  const postStream = buildStream(1235);
 
   sandbox.stub(postStream, "refresh");
 
@@ -125,7 +162,7 @@ test("cancelFilter", function() {
 });
 
 test("findPostIdForPostNumber", function() {
-  var postStream = buildStream(1234, [10, 20, 30, 40, 50, 60, 70]);
+  const postStream = buildStream(1234, [10, 20, 30, 40, 50, 60, 70]);
   postStream.set('gaps', { before: { 60: [55, 58] } });
 
   equal(postStream.findPostIdForPostNumber(500), null, 'it returns null when the post cannot be found');
@@ -136,7 +173,7 @@ test("findPostIdForPostNumber", function() {
 });
 
 test("toggleParticipant", function() {
-  var postStream = buildStream(1236);
+  const postStream = buildStream(1236);
   sandbox.stub(postStream, "refresh");
 
   equal(postStream.get('userFilters.length'), 0, "by default no participants are toggled");
@@ -149,7 +186,7 @@ test("toggleParticipant", function() {
 });
 
 test("streamFilters", function() {
-  var postStream = buildStream(1237);
+  const postStream = buildStream(1237);
   sandbox.stub(postStream, "refresh");
 
   deepEqual(postStream.get('streamFilters'), {}, "there are no postFilters by default");
@@ -179,7 +216,7 @@ test("streamFilters", function() {
 });
 
 test("loading", function() {
-  var postStream = buildStream(1234);
+  let postStream = buildStream(1234);
   ok(!postStream.get('loading'), "we're not loading by default");
 
   postStream.set('loadingAbove', true);
@@ -195,7 +232,7 @@ test("loading", function() {
 });
 
 test("nextWindow", function() {
-  var postStream = buildStream(1234, [1,2,3,5,8,9,10,11,13,14,15,16]);
+  const postStream = buildStream(1234, [1,2,3,5,8,9,10,11,13,14,15,16]);
 
   blank(postStream.get('nextWindow'), 'With no posts loaded, the window is blank');
 
@@ -211,7 +248,7 @@ test("nextWindow", function() {
 });
 
 test("previousWindow", function() {
-  var postStream = buildStream(1234, [1,2,3,5,8,9,10,11,13,14,15,16]);
+  const postStream = buildStream(1234, [1,2,3,5,8,9,10,11,13,14,15,16]);
 
   blank(postStream.get('previousWindow'), 'With no posts loaded, the window is blank');
 
@@ -227,21 +264,22 @@ test("previousWindow", function() {
 });
 
 test("storePost", function() {
-  var postStream = buildStream(1234),
-      post = Discourse.Post.create({id: 1, post_number: 100, raw: 'initial value'});
+  const postStream = buildStream(1234),
+        store = postStream.store,
+        post = store.createRecord('post', {id: 1, post_number: 100, raw: 'initial value'});
 
   blank(postStream.get('topic.highest_post_number'), "it has no highest post number yet");
-  var stored = postStream.storePost(post);
+  let stored = postStream.storePost(post);
   equal(post, stored, "it returns the post it stored");
   equal(post.get('topic'), postStream.get('topic'), "it creates the topic reference properly");
   equal(postStream.get('topic.highest_post_number'), 100, "it set the highest post number");
 
-  var dupePost = Discourse.Post.create({id: 1, post_number: 100, raw: 'updated value'});
-  var storedDupe = postStream.storePost(dupePost);
+  const dupePost = store.createRecord('post', {id: 1, post_number: 100, raw: 'updated value'});
+  const storedDupe = postStream.storePost(dupePost);
   equal(storedDupe, post, "it returns the previously stored post instead to avoid dupes");
   equal(storedDupe.get('raw'), 'updated value', 'it updates the previously stored post');
 
-  var postWithoutId = Discourse.Post.create({raw: 'hello world'});
+  const postWithoutId = store.createRecord('post', {raw: 'hello world'});
   stored = postStream.storePost(postWithoutId);
   equal(stored, postWithoutId, "it returns the same post back");
   equal(postStream.get('postIdentityMap.size'), 1, "it does not add a new entry into the identity map");
@@ -249,9 +287,11 @@ test("storePost", function() {
 });
 
 test("identity map", function() {
-  var postStream = buildStream(1234);
-  var p1 = postStream.appendPost(Discourse.Post.create({id: 1, post_number: 1}));
-  postStream.appendPost(Discourse.Post.create({id: 3, post_number: 4}));
+  const postStream = buildStream(1234),
+        store = postStream.store;
+
+  const p1 = postStream.appendPost(store.createRecord('post', {id: 1, post_number: 1}));
+  postStream.appendPost(store.createRecord('post', {id: 3, post_number: 4}));
 
   equal(postStream.findLoadedPost(1), p1, "it can return cached posts by id");
   blank(postStream.findLoadedPost(4), "it can't find uncached posts");
@@ -262,7 +302,7 @@ test("identity map", function() {
 });
 
 asyncTestDiscourse("loadIntoIdentityMap with no data", function() {
-  var postStream = buildStream(1234);
+  const postStream = buildStream(1234);
   expect(1);
 
   sandbox.stub(Discourse, "ajax");
@@ -273,7 +313,7 @@ asyncTestDiscourse("loadIntoIdentityMap with no data", function() {
 });
 
 asyncTestDiscourse("loadIntoIdentityMap with post ids", function() {
-  var postStream = buildStream(1234);
+  const postStream = buildStream(1234);
   expect(1);
 
   sandbox.stub(Discourse, "ajax").returns(Ember.RSVP.resolve({
@@ -289,12 +329,12 @@ asyncTestDiscourse("loadIntoIdentityMap with post ids", function() {
 });
 
 asyncTestDiscourse("loading a post's history", function() {
-  var postStream = buildStream(1234);
+  const postStream = buildStream(1234);
+  const store = postStream.store;
   expect(3);
 
-  var post = Discourse.Post.create({id: 4321});
-
-  var secondPost = Discourse.Post.create({id: 2222});
+  const post = store.createRecord('post', {id: 4321});
+  const secondPost = store.createRecord('post', {id: 2222});
 
   sandbox.stub(Discourse, "ajax").returns(Ember.RSVP.resolve([secondPost]));
   postStream.findReplyHistory(post).then(function() {
@@ -306,23 +346,28 @@ asyncTestDiscourse("loading a post's history", function() {
 });
 
 test("staging and undoing a new post", function() {
-  var postStream = buildStream(10101, [1]);
-  postStream.appendPost(Discourse.Post.create({id: 1, post_number: 1, topic_id: 10101}));
+  const postStream = buildStream(10101, [1]);
+  const store = postStream.store;
 
-  var user = Discourse.User.create({username: 'eviltrout', name: 'eviltrout', id: 321});
-  var stagedPost = Discourse.Post.create({ raw: 'hello world this is my new post', topic_id: 10101 });
+  const original = store.createRecord('post', {id: 1, post_number: 1, topic_id: 10101});
+  postStream.appendPost(original);
+  ok(postStream.get('lastAppended'), original, "the original post is lastAppended");
 
-  var topic = postStream.get('topic');
+  const user = Discourse.User.create({username: 'eviltrout', name: 'eviltrout', id: 321});
+  const stagedPost = store.createRecord('post', { raw: 'hello world this is my new post', topic_id: 10101 });
+
+  const topic = postStream.get('topic');
   topic.setProperties({
     posts_count: 1,
     highest_post_number: 1
   });
 
   // Stage the new post in the stream
-  var result = postStream.stagePost(stagedPost, user);
+  const result = postStream.stagePost(stagedPost, user);
   equal(result, "staged", "it returns staged");
   equal(topic.get('highest_post_number'), 2, "it updates the highest_post_number");
   ok(postStream.get('loading'), "it is loading while the post is being staged");
+  ok(postStream.get('lastAppended'), original, "it doesn't consider staged posts as the lastAppended");
 
   equal(topic.get('posts_count'), 2, "it increases the post count");
   present(topic.get('last_posted_at'), "it updates last_posted_at");
@@ -342,19 +387,25 @@ test("staging and undoing a new post", function() {
   equal(topic.get('posts_count'), 1, "it reverts the post count");
   equal(postStream.get('filteredPostsCount'), 1, "it retains the filteredPostsCount");
   ok(!postStream.get('posts').contains(stagedPost), "the post is removed from the stream");
+  ok(postStream.get('lastAppended'), original, "it doesn't consider undid post lastAppended");
 });
 
 test("staging and committing a post", function() {
-  var postStream = buildStream(10101, [1]);
-  postStream.appendPost(Discourse.Post.create({id: 1, post_number: 1, topic_id: 10101}));
-  var user = Discourse.User.create({username: 'eviltrout', name: 'eviltrout', id: 321});
-  var stagedPost = Discourse.Post.create({ raw: 'hello world this is my new post', topic_id: 10101 });
+  const postStream = buildStream(10101, [1]);
+  const store = postStream.store;
 
-  var topic = postStream.get('topic');
+  const original = store.createRecord('post', {id: 1, post_number: 1, topic_id: 10101});
+  postStream.appendPost(original);
+  ok(postStream.get('lastAppended'), original, "the original post is lastAppended");
+
+  const user = Discourse.User.create({username: 'eviltrout', name: 'eviltrout', id: 321});
+  const stagedPost = store.createRecord('post', { raw: 'hello world this is my new post', topic_id: 10101 });
+
+  const topic = postStream.get('topic');
   topic.set('posts_count', 1);
 
   // Stage the new post in the stream
-  var result = postStream.stagePost(stagedPost, user);
+  let result = postStream.stagePost(stagedPost, user);
   equal(result, "staged", "it returns staged");
 
   ok(postStream.get('loading'), "it is loading while the post is being staged");
@@ -362,6 +413,7 @@ test("staging and committing a post", function() {
 
   result = postStream.stagePost(stagedPost, user);
   equal(result, "alreadyStaging", "you can't stage a post while it is currently staging");
+  ok(postStream.get('lastAppended'), original, "staging a post doesn't change the lastAppended");
 
   postStream.commitPost(stagedPost);
   ok(postStream.get('posts').contains(stagedPost), "the post is still in the stream");
@@ -369,15 +421,16 @@ test("staging and committing a post", function() {
 
   equal(postStream.get('filteredPostsCount'), 2, "it increases the filteredPostsCount");
 
-  var found = postStream.findLoadedPost(stagedPost.get('id'));
+  const found = postStream.findLoadedPost(stagedPost.get('id'));
   present(found, "the post is in the identity map");
   ok(postStream.indexOf(stagedPost) > -1, "the post is in the stream");
   equal(found.get('raw'), 'different raw value', 'it also updated the value in the stream');
-
+  ok(postStream.get('lastAppended'), found, "comitting a post changes lastAppended");
 });
 
 test('triggerNewPostInStream', function() {
-  var postStream = buildStream(225566);
+  const postStream = buildStream(225566);
+  const store = postStream.store;
 
   sandbox.stub(postStream, 'appendMore');
   sandbox.stub(postStream, 'refresh');
@@ -399,7 +452,7 @@ test('triggerNewPostInStream', function() {
   ok(!postStream.appendMore.calledOnce, "it wont't delegate to appendMore because the last post is not loaded");
 
   postStream.cancelFilter();
-  postStream.appendPost(Discourse.Post.create({id: 1, post_number: 2}));
+  postStream.appendPost(store.createRecord('post', {id: 1, post_number: 2}));
   postStream.triggerNewPostInStream(2);
   ok(postStream.appendMore.calledOnce, "delegates to appendMore because the last post is loaded");
 });
@@ -408,10 +461,11 @@ test('triggerNewPostInStream', function() {
 test("loadedAllPosts when the id changes", function() {
   // This can happen in a race condition between staging a post and it coming through on the
   // message bus. If the id of a post changes we should reconsider the loadedAllPosts property.
-  var postStream = buildStream(10101, [1, 2]);
-  var postWithoutId = Discourse.Post.create({ raw: 'hello world this is my new post' });
+  const postStream = buildStream(10101, [1, 2]);
+  const store = postStream.store;
+  const postWithoutId = store.createRecord('post', { raw: 'hello world this is my new post' });
 
-  postStream.appendPost(Discourse.Post.create({id: 1, post_number: 1}));
+  postStream.appendPost(store.createRecord('post', {id: 1, post_number: 1}));
   postStream.appendPost(postWithoutId);
   ok(!postStream.get('loadedAllPosts'), 'the last post is not loaded');
 
@@ -420,11 +474,12 @@ test("loadedAllPosts when the id changes", function() {
 });
 
 test("comitting and triggerNewPostInStream race condition", function() {
-  var postStream = buildStream(4964);
+  const postStream = buildStream(4964);
+  const store = postStream.store;
 
-  postStream.appendPost(Discourse.Post.create({id: 1, post_number: 1}));
-  var user = Discourse.User.create({username: 'eviltrout', name: 'eviltrout', id: 321});
-  var stagedPost = Discourse.Post.create({ raw: 'hello world this is my new post' });
+  postStream.appendPost(store.createRecord('post', {id: 1, post_number: 1}));
+  const user = Discourse.User.create({username: 'eviltrout', name: 'eviltrout', id: 321});
+  const stagedPost = store.createRecord('post', { raw: 'hello world this is my new post' });
 
   postStream.stagePost(stagedPost, user);
   equal(postStream.get('filteredPostsCount'), 0, "it has no filteredPostsCount yet");

@@ -9,6 +9,18 @@
 
 Discourse.NavItem = Discourse.Model.extend({
 
+  displayName: function() {
+    var categoryName = this.get('categoryName'),
+        name = this.get('name'),
+        extra = { count: this.get('count') || 0 };
+
+    if (categoryName) {
+      name = 'category';
+      extra.categoryName = Discourse.Formatter.toTitleCase(categoryName);
+    }
+    return I18n.t("filters." + name.replace("/", ".") + ".title", extra);
+  }.property('categoryName,name,count'),
+
   topicTrackingState: function() {
     return Discourse.TopicTrackingState.current();
   }.property(),
@@ -84,7 +96,15 @@ Discourse.NavItem.reopenClass({
     args = args || {};
     if (category) { args.category = category }
 
-    return Discourse.SiteSettings.top_menu.split("|").map(function(i) {
+    var items = Discourse.SiteSettings.top_menu.split("|");
+
+    if (args.filterMode && !_.some(items, function(i){
+      return i.indexOf(args.filterMode) !== -1;
+    })) {
+      items.push(args.filterMode);
+    }
+
+    return items.map(function(i) {
       return Discourse.NavItem.fromText(i, args);
     }).filter(function(i) {
       return i !== null && !(category && i.get("name").indexOf("categor") === 0);

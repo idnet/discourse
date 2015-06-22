@@ -1,7 +1,10 @@
 require "digest/sha1"
 require_dependency "image_sizer"
 require_dependency "file_helper"
+require_dependency "url_helper"
+require_dependency "db_helper"
 require_dependency "validators/upload_validator"
+require_dependency "file_store/local_store"
 
 class Upload < ActiveRecord::Base
   belongs_to :user
@@ -52,43 +55,51 @@ class Upload < ActiveRecord::Base
   def self.create_for(user_id, file, filename, filesize, options = {})
     sha1 = Digest::SHA1.file(file).hexdigest
 
-    # do we already have that upload?
-    upload = find_by(sha1: sha1)
+    DistributedMutex.synchronize("upload_#{sha1}") do
+      # do we already have that upload?
+      upload = find_by(sha1: sha1)
 
-    # make sure the previous upload has not failed
-    if upload && upload.url.blank?
-      upload.destroy
-      upload = nil
+      # make sure the previous upload has not failed
+      if upload && upload.url.blank?
+        upload.destroy
+        upload = nil
+      end
+
+      # return the previous upload if any
+      return upload unless upload.nil?
+
+      # create the upload otherwise
+      upload = Upload.new
+      upload.user_id           = user_id
+      upload.original_filename = filename
+      upload.filesize          = filesize
+      upload.sha1              = sha1
+      upload.url               = ""
+      upload.origin            = options[:origin][0...1000] if options[:origin]
+
+      if FileHelper.is_image?(filename)
+        # deal with width & height for images
+        upload = resize_image(filename, file, upload)
+        # optimize image
+        ImageOptim.new.optimize_image!(file.path) rescue nil
+      end
+
+      return upload unless upload.save
+
+      # store the file and update its url
+      File.open(file.path) do |f|
+        url = Discourse.store.store_upload(f, upload, options[:content_type])
+        if url.present?
+          upload.url = url
+          upload.save
+        else
+          upload.errors.add(:url, I18n.t("upload.store_failure", { upload_id: upload.id, user_id: user_id }))
+        end
+      end
+
+      # return the uploaded file
+      upload
     end
-
-    # return the previous upload if any
-    return upload unless upload.nil?
-
-    # create the upload otherwise
-    upload = Upload.new
-    upload.user_id           = user_id
-    upload.original_filename = filename
-    upload.filesize          = filesize
-    upload.sha1              = sha1
-    upload.url               = ""
-    upload.origin            = options[:origin][0...1000] if options[:origin]
-
-    # deal with width & height for images
-    upload = resize_image(filename, file, upload) if FileHelper.is_image?(filename)
-
-    return upload unless upload.save
-
-    # store the file and update its url
-    url = Discourse.store.store_upload(file, upload, options[:content_type])
-    if url.present?
-      upload.url = url
-      upload.save
-    else
-      upload.errors.add(:url, I18n.t("upload.store_failure", { upload_id: upload.id, user_id: user_id }))
-    end
-
-    # return the uploaded file
-    upload
   end
 
   def self.resize_image(filename, file, upload)
@@ -126,12 +137,71 @@ class Upload < ActiveRecord::Base
   def self.get_from_url(url)
     return if url.blank?
     # we store relative urls, so we need to remove any host/cdn
-    url = url.gsub(/^#{Discourse.asset_host}/i, "") if Discourse.asset_host.present?
-    Upload.find_by(url: url) if Discourse.store.has_been_uploaded?(url)
+    url = url.sub(/^#{Discourse.asset_host}/i, "") if Discourse.asset_host.present?
+    # when using s3, we need to replace with the absolute base url
+    url = url.sub(/^#{SiteSetting.s3_cdn_url}/i, Discourse.store.absolute_base_url) if SiteSetting.s3_cdn_url.present?
+    Upload.find_by(url: url)
   end
 
   def self.fix_image_orientation(path)
     `convert #{path} -auto-orient #{path}`
+  end
+
+  def self.migrate_to_new_scheme(limit=50)
+    problems = []
+
+    if SiteSetting.migrate_to_new_scheme
+      max_file_size_kb = [SiteSetting.max_image_size_kb, SiteSetting.max_attachment_size_kb].max.kilobytes
+      local_store = FileStore::LocalStore.new
+
+      Upload.where("url NOT LIKE '%/original/_X/%'")
+            .limit(limit)
+            .order(id: :desc)
+            .each do |upload|
+        begin
+          # keep track of the url
+          previous_url = upload.url.dup
+          # where is the file currently stored?
+          external = previous_url =~ /^\/\//
+          # download if external
+          if external
+            url = SiteSetting.scheme + ":" + previous_url
+            file = FileHelper.download(url, max_file_size_kb, "discourse", true) rescue nil
+            path = file.path
+          else
+            path = local_store.path_for(upload)
+          end
+          # compute SHA if missing
+          if upload.sha1.blank?
+            upload.sha1 = Digest::SHA1.file(path).hexdigest
+          end
+          # optimize if image
+          if FileHelper.is_image?(File.basename(path))
+            ImageOptim.new.optimize_image!(path)
+          end
+          # store to new location & update the filesize
+          File.open(path) do |f|
+            upload.url = Discourse.store.store_upload(f, upload)
+            upload.filesize = f.size
+            upload.save
+          end
+          # remap the URLs
+          DbHelper.remap(UrlHelper.absolute(previous_url), upload.url) unless external
+          DbHelper.remap(previous_url, upload.url)
+          # remove the old file (when local)
+          unless external
+            FileUtils.rm(path, force: true) rescue nil
+          end
+        rescue => e
+          problems << { upload: upload, ex: e }
+        ensure
+          file.try(:unlink) rescue nil
+          file.try(:close) rescue nil
+        end
+      end
+    end
+
+    problems
   end
 
 end
